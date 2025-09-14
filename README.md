@@ -1,28 +1,34 @@
-# TB Chest X-ray Classifier (DenseNet-121 + MixStyle)
+# Domain Generalization for TB Detection on Chest X-rays
+DenseNet-121 + **MixStyle** + multi-level augmentation for robust, cross-site tuberculosis (TB) screening.
 
-End-to-end pipeline to train, fine-tune, and externally validate a tuberculosis (TB) chest X-ray classifier. Includes a plain baseline (DenseNet-121) and an enhanced domain-generalization model (MixStyle + strong augmentations + weighted BCE), with evaluation on two unseen datasets.
+> This repository implements the methods and experiments from the accompanying research paper, including training, external validation (Shenzhen, Pakistan), and single-image inference.
 
-## Highlights
-- **Models:** DenseNet-121 baseline; enhanced head with **MixStyle**, GAP+GMP **concatenation**, BatchNorm, Dropout.
-- **Class imbalance:** custom **weighted BCE** from empirical class frequencies.
-- **Augmentations:** flip, rotation, zoom, contrast, brightness, ImageNet-style normalization.
-- **Evaluation:** AUROC/PR-AUC, F1, MCC, Brier score, balanced accuracy; **ROC curves**, **confusion matrix**, and training curves.
-- **External validation:** Shenzhen & Pakistan CXR datasets (thresholds tunable; 0.9/0.5 shown).
+## Why this matters
+- **TB burden:** ~10.8M infections and 1.25M deaths in 2023; many cases go undetected in low-resource settings.
+- **Gap:** CAD models often degrade across hospitals/devices (domain shift).
+- **Goal:** Improve **cross-site generalization** without extra labels/data by mixing feature “styles” and strong image-space augmentations.
 
-## Data
-Downloaded automatically via `kagglehub`:
-- `tawsifurrahman/tuberculosis-tb-chest-xray-dataset` (primary train/val/test split)
-- `jtiptj/chest-xray-pneumoniacovid19tuberculosis` (Shenzhen) for external test
-- `yasserhessein/tuberculosis-chest-x-rays-images` (Pakistan) for external test
+## Method 
+- **Backbone:** DenseNet-121 (ImageNet pretrained).
+- **Head:** GAP + GMP → concat → BN → Dropout → Dense(256) → BN → Dropout → Dense(1, sigmoid).
+- **Domain Generalization:**
+  - **MixStyle (p=0.5, α=0.3)** injected after backbone features during training to mix channel-wise mean/variance across samples → style-invariant features.
+  - **Multi-level augmentations:** horizontal flip, ±3° rotation, ±5–10% zoom/shift, ±10–15% brightness/contrast jitter (training only).
+- **Training schedule (20 epochs):**
+  - Phase 1: **freeze** backbone, train head.
+  - Phase 2: **unfreeze** backbone, lower LR.
+- **Imbalance handling:** **class-weighted BCE** (higher FN penalty).
+- **Optimizer/Callbacks:** Adam, ReduceLROnPlateau, EarlyStopping, ModelCheckpoint.
 
-> You’ll need Kaggle access on the machine (Kaggle/Colab recommended).
+## Datasets
+- **Train/val/test:** Aggregated TB CXR dataset (≈3500 normal / 700 TB).
+- **External tests:** **Shenzhen** (234 normal / 41 TB) and **Pakistan** (2494 TB / 514 normal).
+- **Preprocessing:** resize 224×224; ImageNet normalization; grayscale replicated to 3-channel.
 
-## Environment
-- Python 3.10+
-- TensorFlow/Keras 2.15+ (GPU recommended), scikit-learn, pandas, numpy, pillow, matplotlib, opencv-python, kagglehub
-- One helper script is fetched at runtime:
-  - `helper_functions.py` (confusion matrix & training curves) from mrdbourke’s repo
+## Key results (external, unseen sites)
+- **Shenzhen:** Accuracy **0.66 → 0.90**, TB precision **0.31 → 0.60**, TB recall **1.00 → 0.95** (far fewer false positives while keeping very high sensitivity).
+- **Pakistan:** Accuracy **0.72 → 0.78**, TB recall **0.71 → 0.79** (many more true positives with modest FP increase).
 
-_Minimal install:_
-```bash
-pip install tensorflow scikit-learn pandas numpy pillow matplotlib opencv-python kagglehub
+> Takeaway: The same recipe improves specificity in a low-prevalence set (Shenzhen) and **sensitivity** in a high-prevalence set (Pakistan), which is what screening programs need.
+
+## Repo structure
